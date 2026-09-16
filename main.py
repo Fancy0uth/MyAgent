@@ -3,6 +3,8 @@
 import json
 import uuid
 
+from agent import run_agent
+# 保留第 3 关的导出，方便旧的手动分发测试继续使用。
 from tools import dispatch_tool
 
 
@@ -79,12 +81,9 @@ def get_user_input(input_fn=input) -> str:
 
 def main() -> None:
     print("main.py 已启动")
-    request_json = get_user_input()
-    print("\n程序生成的 JSON 调用：")
-    print(request_json)
-
-    result = dispatch_tool(request_json)
-    print("\n工具执行结果：")
+    question = input("请输入你想查询的问题：").strip()
+    result = run_agent(question)
+    print("\nAgent 执行结果：")
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
