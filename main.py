@@ -1,9 +1,11 @@
-"""命令行入口：收集用户参数，生成 JSON，再统一分发工具调用。"""
+"""命令行入口：选择模型模式，收集问题并展示 Agent 结果。"""
 
+import argparse
 import json
 import uuid
 
 from agent import run_agent
+from model_client import DeepSeekModelClient, MockModelClient
 # 保留第 3 关的导出，方便旧的手动分发测试继续使用。
 from tools import dispatch_tool
 
@@ -13,6 +15,20 @@ TOOL_NAMES = {
     "2": "list_files",
     "3": "search_text",
 }
+
+DEFAULT_MODEL = "deepseek-flash"
+DEFAULT_MAX_MODEL_REQUESTS = 5
+DEFAULT_MAX_TOOL_EXECUTIONS = 10
+
+
+def build_model_client(mode: str, model: str):
+    """根据模式创建客户端；只有 real 模式才会初始化真实模型。"""
+    if mode == "mock":
+        return MockModelClient()
+    if mode == "real":
+        # 真实模式必须由 --real 明确开启，避免普通运行产生网络请求和费用。
+        return DeepSeekModelClient(model=model)
+    raise ValueError("模式必须是 mock 或 real")
 
 
 def _ask_non_empty(input_fn, prompt: str) -> str:
@@ -79,10 +95,52 @@ def get_user_input(input_fn=input) -> str:
     return json.dumps(request, ensure_ascii=False)
 
 
-def main() -> None:
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description="只读代码仓库 Agent")
+    parser.add_argument(
+        "--real",
+        action="store_true",
+        help="明确启用 DeepSeek 真实模型；默认使用离线模拟模型",
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"真实模式使用的模型，默认是 {DEFAULT_MODEL}",
+    )
+    parser.add_argument(
+        "--max-model-requests",
+        type=int,
+        default=DEFAULT_MAX_MODEL_REQUESTS,
+        help=f"最多请求模型的次数，默认是 {DEFAULT_MAX_MODEL_REQUESTS}",
+    )
+    parser.add_argument(
+        "--max-tool-executions",
+        type=int,
+        default=DEFAULT_MAX_TOOL_EXECUTIONS,
+        help=f"最多执行工具的次数，默认是 {DEFAULT_MAX_TOOL_EXECUTIONS}",
+    )
+    args = parser.parse_args(argv)
+
+    mode = "real" if args.real else "mock"
+    try:
+        client = build_model_client(mode, args.model)
+    except (ImportError, ValueError) as exc:
+        print(f"无法启动 {mode} 模式：{exc}")
+        return
+
+    # 在模型调用前显示关键运行配置，方便确认是否真的打开了 real 模式。
+    print(
+        f"运行模式：{mode}；模型：{args.model if mode == 'real' else 'mock'}；"
+        f"模型预算：{args.max_model_requests}；工具预算：{args.max_tool_executions}"
+    )
     print("main.py 已启动")
     question = input("请输入你想查询的问题：").strip()
-    result = run_agent(question)
+    result = run_agent(
+        question,
+        model_client=client,
+        max_model_requests=args.max_model_requests,
+        max_tool_executions=args.max_tool_executions,
+    )
     print("\nAgent 执行结果：")
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
