@@ -25,7 +25,10 @@ def _run_result(
     answer: Optional[str] = None,
     error: Optional[str] = None,
     message: Optional[str] = None,
+    reason: Optional[str] = None,
 ) -> dict:
+    # status 表示运行处于什么状态，reason 单独说明为什么进入这个状态。
+    # 这样“停止”可以统一处理，同时还能区分模型预算和工具预算。
     result = {
         "status": status,
         "answer": answer,
@@ -33,6 +36,8 @@ def _run_result(
         "model_requests": model_requests,
         "tool_executions": tool_executions,
     }
+    if reason is not None:
+        result["reason"] = reason
     if error is not None:
         result["error"] = error
     if message is not None:
@@ -117,10 +122,12 @@ def run_agent(
     while True:
         if model_requests >= max_model_requests:
             return _run_result(
-                "stopped_limit",
+                "stopped",
                 history,
                 model_requests,
                 tool_executions,
+                # 这是模型请求次数用完，不是工具执行次数用完。
+                reason="model_call_limit",
                 message="已达到模型请求次数上限",
             )
 
@@ -238,10 +245,12 @@ def run_agent(
                 for pending_call in calls[call_index:]:
                     _record_not_executed(history, pending_call["id"])
                 return _run_result(
-                    "stopped_limit",
+                    "stopped",
                     history,
                     model_requests,
                     tool_executions,
+                    # 剩余工具调用已经记录为未执行，整个运行在这里停止。
+                    reason="tool_call_limit",
                     message="已达到工具执行次数上限，剩余调用未执行",
                 )
 

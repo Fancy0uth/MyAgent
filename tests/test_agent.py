@@ -103,7 +103,9 @@ class AgentLoopTests(unittest.TestCase):
             max_model_requests=2,
         )
 
-        self.assertEqual(result["status"], "stopped_limit")
+        # 运行状态和停止原因分开记录，便于后续事件系统继续使用。
+        self.assertEqual(result["status"], "stopped")
+        self.assertEqual(result["reason"], "model_call_limit")
         self.assertEqual(result["model_requests"], 2)
         self.assertEqual(result["tool_executions"], 2)
 
@@ -202,7 +204,9 @@ class ToolBudgetTests(unittest.TestCase):
             max_tool_executions=1,
         )
 
-        self.assertEqual(result["status"], "stopped_limit")
+        # 工具预算耗尽时，整个运行停止，但原因要明确是工具预算。
+        self.assertEqual(result["status"], "stopped")
+        self.assertEqual(result["reason"], "tool_call_limit")
         tool_results = [
             message
             for message in result["history"]

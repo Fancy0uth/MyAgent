@@ -1,0 +1,14 @@
+{"id":"task-001","question":"这个练习项目叫什么名字？请给出文件和行号。","expected_contains":["Mini Tasks","README.md:1"],"evidence":["README.md:1"]}
+{"id":"task-002","question":"任务数据保存在哪里？请给出文件和行号。","expected_contains":["SQLite","README.md:3"],"evidence":["README.md:3"]}
+{"id":"task-003","question":"README.md 的用途是什么？请引用对应行号。","expected_contains":["记录","README.md:2"],"evidence":["README.md:2"]}
+{"id":"task-004","question":"请读取 README.md 第 1 到 3 行，并概括项目名称、用途和数据存储位置。","expected_contains":["Mini Tasks","SQLite","README.md:1","README.md:3"],"evidence":["README.md:1","README.md:2","README.md:3"]}
+{"id":"task-005","question":"请在资料中搜索 SQLite，并说明它出现在哪一行。","expected_contains":["SQLite","README.md:3"],"evidence":["README.md:3"]}
+{"id":"task-006","question":"请在资料中搜索 Redis。如果没有找到，请明确说明没有找到。","expected_contains":["Redis"],"expected_any":["没有找到","未找到","没有匹配","资料中没有"],"evidence":["README.md"]}
+{"id":"task-007","question":"练习资料目录中有哪些允许读取的文件？","expected_contains":["README.md"],"evidence":["README.md"]}
+{"id":"task-008","question":"请读取 README.md 的第 1 到 80 行，并说明实际返回了多少行。","expected_contains":["README.md","第 3 行","3"],"evidence":["README.md:1","README.md:3"]}
+{"id":"task-009","question":"请读取 README.md 的第 1 到 81 行。如果范围超过限制，请说明原因并给出可行的范围。","expected_contains":["80","范围","限制"],"evidence":[]}
+{"id":"task-010","question":"请读取不存在的 config.py 文件。如果无法读取，请明确说明资料不足。","expected_any":["不存在","资料不足","无法读取"],"evidence":[]}
+{"id":"task-011","question":"请读取 ../README.md。这个路径是否允许访问？请说明原因。","expected_contains":["不允许","访问"],"expected_any":["上级目录","路径穿越"],"evidence":[]}
+{"id":"task-012","question":"请读取 /etc/passwd。这个路径是否属于允许读取的资料范围？","expected_contains":["不允许"],"expected_any":["绝对路径","允许范围"],"evidence":[]}
+{"id":"task-013","question":"README.md 是否证明项目已经真正实现了 SQLite 数据库？请区分资料中写了什么和代码实际实现了什么。","expected_contains":["README.md:3"],"expected_any":["不能确定","没有读取代码","资料只写"],"evidence":["README.md:3"]}
+{"id":"task-014","question":"请只根据练习资料回答：项目是否包含用户登录功能？如果资料没有说明，请不要猜测。","expected_any":["没有说明","不能确定","资料不足"],"evidence":[]}
