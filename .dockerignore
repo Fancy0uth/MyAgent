@@ -1,0 +1,20 @@
+# 不把密钥和本地配置送入 Docker 构建上下文。
+.env
+.env.*
+!.env.example
+
+# 不把 Git 历史和本地运行产物送入构建上下文。
+.git
+.git/**
+runs/
+workspaces/
+
+# 不把本地 Python 缓存、虚拟环境和编辑器文件送入构建上下文。
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.idea/
+.vscode/

@@ -233,7 +233,11 @@ TOOL_REGISTRY: Dict[str, Tool] = {
 }
 
 
-def dispatch_tool(request_json: str) -> dict:
+def dispatch_tool(
+    request_json: str,
+    *,
+    extra_tools: Optional[Dict[str, Tool]] = None,
+) -> dict:
     """解析一条 JSON 调用，并根据 name 执行已注册工具。"""
     if not isinstance(request_json, str):
         return _failure("INVALID_ARGUMENT", "工具调用必须是 JSON 字符串")
@@ -258,7 +262,10 @@ def dispatch_tool(request_json: str) -> dict:
             "call_id": call_id,
             **_failure("INVALID_ARGUMENT", "name 必须是非空字符串"),
         }
-    if name not in TOOL_REGISTRY:
+    registered_tool = TOOL_REGISTRY.get(name)
+    if registered_tool is None and extra_tools is not None:
+        registered_tool = extra_tools.get(name)
+    if registered_tool is None:
         return {
             "ok": False,
             "call_id": call_id,
@@ -271,7 +278,7 @@ def dispatch_tool(request_json: str) -> dict:
             **_failure("INVALID_ARGUMENT", "arguments 必须是对象"),
         }
 
-    tool = TOOL_REGISTRY[name]
+    tool = registered_tool
     try:
         tool_result = tool(**arguments)
     except TypeError:

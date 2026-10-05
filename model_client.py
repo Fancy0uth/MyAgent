@@ -141,6 +141,40 @@ class MockModelClient:
             "content": "根据读取到的资料，相关信息位于 README.md:3。",
         }
 
+    def stream(self, messages):
+        """把 Mock 的完整响应拆成学习用的流式事件。"""
+        response = self.respond(messages)
+        yield {"type": "start"}
+
+        if response["type"] == "final":
+            content = response["content"]
+            midpoint = max(1, len(content) // 2)
+            yield {"type": "text_delta", "text": content[:midpoint]}
+            yield {"type": "text_delta", "text": content[midpoint:]}
+            yield {"type": "finish", "reason": "stop"}
+            return
+
+        calls = (
+            [response]
+            if response["type"] == "tool_call"
+            else response["calls"]
+        )
+        for call in calls:
+            arguments = json.dumps(call["arguments"], ensure_ascii=False)
+            midpoint = max(1, len(arguments) // 2)
+            yield {
+                "type": "tool_call_delta",
+                "call_id": call["id"],
+                "name": call["name"],
+                "arguments_delta": arguments[:midpoint],
+            }
+            yield {
+                "type": "tool_call_delta",
+                "call_id": call["id"],
+                "arguments_delta": arguments[midpoint:],
+            }
+        yield {"type": "finish", "reason": "tool_calls"}
+
 
 class DeepSeekModelClient:
     """通过 OpenAI 兼容接口调用 DeepSeek，并转换为 Agent 内部格式。"""
@@ -380,3 +414,88 @@ class DeepSeekModelClient:
                 "DeepSeek 没有返回文本回答或工具调用",
             )
         return {"type": "final", "content": content}
+
+    def stream(self, messages: List[dict]):
+        """把 OpenAI 兼容 SDK 的增量 chunk 转成内部流事件。"""
+        try:
+            response_stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=self._to_api_messages(messages),
+                tools=TOOL_DEFINITIONS,
+                tool_choice="auto",
+                stream=True,
+            )
+        except Exception as exc:
+            error_code = self._api_error_code(exc)
+            raise ModelClientError(
+                error_code,
+                "DeepSeek 流式请求失败",
+            ) from exc
+
+        yield {"type": "start"}
+        index_to_id: Dict[Any, str] = {}
+        saw_finish = False
+        try:
+            for chunk in response_stream:
+                choices = getattr(chunk, "choices", None)
+                if not choices:
+                    usage = getattr(chunk, "usage", None)
+                    if isinstance(usage, dict):
+                        yield {"type": "usage", "usage": dict(usage)}
+                    continue
+
+                choice = choices[0]
+                delta = getattr(choice, "delta", None)
+                if delta is not None:
+                    content = getattr(delta, "content", None)
+                    if isinstance(content, str) and content:
+                        yield {"type": "text_delta", "text": content}
+
+                    tool_deltas = getattr(delta, "tool_calls", None) or []
+                    for tool_delta in tool_deltas:
+                        index = getattr(tool_delta, "index", None)
+                        call_id = getattr(tool_delta, "id", None)
+                        if not isinstance(call_id, str) or not call_id.strip():
+                            call_id = index_to_id.get(index)
+                        if not isinstance(call_id, str) or not call_id.strip():
+                            raise ModelClientError(
+                                "INVALID_MODEL_RESPONSE",
+                                "流式工具片段缺少可关联的 call_id",
+                            )
+                        index_to_id[index] = call_id
+
+                        function = getattr(tool_delta, "function", None)
+                        name = getattr(function, "name", None)
+                        arguments = getattr(function, "arguments", "")
+                        if arguments is None:
+                            arguments = ""
+                        if not isinstance(arguments, str):
+                            raise ModelClientError(
+                                "INVALID_MODEL_RESPONSE",
+                                "流式工具参数片段必须是字符串",
+                            )
+                        if name is not None or arguments:
+                            yield {
+                                "type": "tool_call_delta",
+                                "call_id": call_id,
+                                "name": name,
+                                "arguments_delta": arguments,
+                            }
+
+                finish_reason = getattr(choice, "finish_reason", None)
+                if finish_reason is not None and not saw_finish:
+                    saw_finish = True
+                    yield {"type": "finish", "reason": finish_reason}
+        except ModelClientError:
+            raise
+        except Exception as exc:
+            raise ModelClientError(
+                self._api_error_code(exc),
+                "DeepSeek 流式响应读取失败",
+            ) from exc
+
+        if not saw_finish:
+            raise ModelClientError(
+                "STREAM_INCOMPLETE",
+                "DeepSeek 流式响应没有正常结束",
+            )

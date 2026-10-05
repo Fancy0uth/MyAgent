@@ -1,0 +1,8 @@
+{"id":"compat-001","kind":"rpc_jsonl","description":"JSONL 编解码保留 Unicode 和嵌入换行"}
+{"id":"compat-002","kind":"event_order","description":"运行事件按发生顺序保存"}
+{"id":"compat-003","kind":"cancel_before_model","description":"运行开始前取消不会发起模型请求"}
+{"id":"compat-004","kind":"read_range_limit","description":"超过 80 行的读取请求被拒绝"}
+{"id":"compat-005","kind":"session_branch","description":"会话分支只使用当前选择的上下文"}
+{"id":"compat-006","kind":"compaction_boundary","description":"压缩只在显式开启时改变上下文"}
+{"id":"compat-007","kind":"native_extension_block","description":"原生扩展阻止受保护目录写入"}
+{"id":"compat-008","kind":"resource_loading","description":"固定版本资源加载和显式扩展加载"}

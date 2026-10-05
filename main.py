@@ -6,8 +6,10 @@ import uuid
 
 from agent import run_agent
 from model_client import DeepSeekModelClient, MockModelClient
+from sessions import SessionStore
 # 保留第 3 关的导出，方便旧的手动分发测试继续使用。
 from tools import dispatch_tool
+from ui import run_repl
 
 
 TOOL_NAMES = {
@@ -95,6 +97,66 @@ def get_user_input(input_fn=input) -> str:
     return json.dumps(request, ensure_ascii=False)
 
 
+def format_event_summary(events: list[dict]) -> str:
+    """把事件列表转换成适合终端快速阅读的摘要。"""
+    # 事件的完整数据仍然会在下面以 JSON 输出；这里只负责提供一条
+    # 人类容易扫读的时间线，方便观察 Agent 走过了哪些步骤。
+    if not isinstance(events, list) or not events:
+        return "事件摘要：\n（没有事件）"
+
+    lines = ["事件摘要："]
+    for event in events:
+        event_name = event.get("event", "unknown")
+
+        if event_name == "run_started":
+            lines.append(f"[run_started] {event.get('run_id', '-')}")
+        elif event_name == "model_started":
+            lines.append(
+                f"[model_started] request={event.get('request_number', '-')}"
+            )
+        elif event_name == "model_finished":
+            lines.append(
+                f"[model_finished] status={event.get('status', '-')} "
+                f"duration={event.get('duration_ms', 0):.2f}ms"
+            )
+        elif event_name == "tool_started":
+            lines.append(
+                f"[tool_started] {event.get('tool_name', '-')} "
+                f"call={event.get('tool_call_id', '-')}"
+            )
+        elif event_name == "tool_finished":
+            lines.append(
+                f"[tool_finished] {event.get('tool_name', '-')} "
+                f"status={event.get('status', '-')} "
+                f"duration={event.get('duration_ms', 0):.2f}ms"
+            )
+        elif event_name == "run_finished":
+            lines.append(
+                f"[run_finished] status={event.get('status', '-')} "
+                f"duration={event.get('duration_ms', 0):.2f}ms"
+            )
+        else:
+            # 如果以后新增事件类型，摘要仍然能显示它，而不是静默丢失。
+            lines.append(f"[{event_name}]")
+
+    return "\n".join(lines)
+
+
+def format_write_proposal(proposal: dict) -> str:
+    """把写入提议格式化成用户可以审核的文本。"""
+    lines = [
+        "写入提议：",
+        f"proposal_id={proposal.get('proposal_id', '-')}",
+        f"path={proposal.get('path', '-')}",
+        f"status={proposal.get('status', '-')}",
+        f"old_sha256={proposal.get('old_sha256', '-')}",
+        f"new_sha256={proposal.get('new_sha256', '-')}",
+        "差异：",
+        proposal.get("diff", "（没有差异）"),
+    ]
+    return "\n".join(lines)
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="只读代码仓库 Agent")
     parser.add_argument(
@@ -119,6 +181,15 @@ def main(argv=None) -> None:
         default=DEFAULT_MAX_TOOL_EXECUTIONS,
         help=f"最多执行工具的次数，默认是 {DEFAULT_MAX_TOOL_EXECUTIONS}",
     )
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="进入可测试的终端交互模式；默认仍只处理一个问题",
+    )
+    parser.add_argument(
+        "--session",
+        help="交互模式使用的 JSONL 会话文件；不提供时 /resume 不可用",
+    )
     args = parser.parse_args(argv)
 
     mode = "real" if args.real else "mock"
@@ -134,6 +205,21 @@ def main(argv=None) -> None:
         f"模型预算：{args.max_model_requests}；工具预算：{args.max_tool_executions}"
     )
     print("main.py 已启动")
+
+    if args.interactive:
+        # UI 只负责输入和展示；真正的 Agent 循环仍由 run_agent 执行。
+        session_store = SessionStore(args.session) if args.session else None
+        run_repl(
+            session_store=session_store,
+            run_kwargs={
+                "model_client": client,
+                "max_model_requests": args.max_model_requests,
+                "max_tool_executions": args.max_tool_executions,
+            },
+            recover_kwargs={"model_client": client},
+        )
+        return
+
     question = input("请输入你想查询的问题：").strip()
     result = run_agent(
         question,
@@ -141,6 +227,9 @@ def main(argv=None) -> None:
         max_model_requests=args.max_model_requests,
         max_tool_executions=args.max_tool_executions,
     )
+
+    # 先显示简短事件时间线，再显示完整历史和事件 JSON，兼顾观察和调试。
+    print("\n" + format_event_summary(result.get("events", [])))
     print("\nAgent 执行结果：")
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

@@ -882,6 +882,28 @@ python -m unittest discover -s tests -p "test_sessions.py" -v
 
 **消息合法性：**下一次发送模型前必须处理悬空 call/result。不能在历史中留下无法关联的结果，也不能为了凑齐格式伪造成功结果。
 
+**本项目入口：**`agent.py` 的 `recover_agent()` 会重建最近一次运行的 `history`，检查工作区、权限配置和 Provider 客户端类型，并报告 `ready_to_resume`、`completed` 或 `recovery_required`。它本身不会发起模型请求；只有在读取调用悬空、预算大于 0 且工作区/只读权限匹配时，才会重试 `list_files`、`read_file` 或 `search_text`。Provider 检查只确认调用方提供了匹配类型且有 `respond()` 接口，不代表已联网验证服务可用。
+
+```python
+from pathlib import Path
+
+from agent import recover_agent
+from model_client import MockModelClient
+from sessions import SessionStore
+from tools import ROOT
+
+recovery = recover_agent(
+    SessionStore(Path("runs/session.jsonl")),
+    model_client=MockModelClient(),
+    workspace_root=ROOT,
+    permission_profile="read_only",
+    read_only_retry_budget=0,  # 先只检查，不重试读取工具
+)
+print(recovery["status"], recovery["reason"])
+```
+
+`run_coding_flow(..., session_store=store)` 还会把写入提议的相对路径、新旧 SHA-256、独立 `operation_id` 和绑定提议的批准记录到账本；写入结果未保存时，恢复逻辑只比较工作区文件哈希并要求人工决策，不会再次调用编辑器或命令。
+
 **过关：**无副作用重复执行、未知结果诚实暴露。会话恢复不等于能够安全“从任意代码行继续”。
 
 <a id="l18"></a>
